@@ -42,7 +42,8 @@ class Conv2d(minitorch.Module):
 
     def forward(self, input):
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        return minitorch.conv2d(input, self.weights.value) + self.bias.value
+
 
 
 class Network(minitorch.Module):
@@ -68,11 +69,51 @@ class Network(minitorch.Module):
         self.out = None
 
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        # 1. First conv layer (1 -> 4 channels)
+        self.conv1 = Conv2d(1, 4, 3, 3)
+
+        # 2. Second conv layer (4 -> 8 channels)
+        self.conv2 = Conv2d(4, 8, 3, 3)
+
+        # 5. Linear layer after flattening (392 -> 64)
+        self.linear1 = Linear(392, 64)
+
+        # 6. Final linear layer (64 -> num_classes)
+        self.linear2 = Linear(64, C)
 
     def forward(self, x):
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        # print("Input shape:", x.shape)
+
+        # 1. First conv + ReLU
+        self.mid = self.conv1(x)
+        # print("After conv1:", self.mid.shape)
+        self.mid = self.mid.relu()
+
+        # 2. Second conv + ReLU
+        self.out = self.conv2(self.mid)
+        # print("After conv2:", self.out.shape)
+        self.out = self.out.relu()
+
+        # 3. Apply max pooling
+        out = minitorch.maxpool2d(self.out, (4, 4))
+        # print("After maxpool:", out.shape)
+
+        # 4. Flatten - explicitly specify the size
+        flattened_size = 8 * 7 * 7  # channels * height * width
+        out = out.view(BATCH, flattened_size)
+        # print("After flatten:", out.shape)
+
+        # 5. First linear + ReLU + Dropout
+        out = self.linear1(out)
+        out = out.relu()
+        out = minitorch.dropout(out, 0.25)
+
+        # 6. Final linear layer
+        out = self.linear2(out)
+
+        # 7. LogSoftmax
+        return minitorch.logsoftmax(out, dim=1)
 
 
 def make_mnist(start, stop):
@@ -171,4 +212,4 @@ class ImageTrain:
 
 if __name__ == "__main__":
     data_train, data_val = (make_mnist(0, 5000), make_mnist(10000, 10500))
-    ImageTrain().train(data_train, data_val, learning_rate=0.01)
+    ImageTrain().train(data_train, data_val, learning_rate=0.005)

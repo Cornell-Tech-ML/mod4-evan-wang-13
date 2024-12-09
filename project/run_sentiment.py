@@ -1,9 +1,12 @@
 import random
-
+import os
 import embeddings
 
 import minitorch
 from datasets import load_dataset
+
+if 'HOME' not in os.environ:
+    os.environ['HOME'] = os.environ['USERPROFILE']
 
 BACKEND = minitorch.TensorBackend(minitorch.FastOps)
 
@@ -35,8 +38,19 @@ class Conv1d(minitorch.Module):
 
     def forward(self, input):
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+    # Get dimensions
+        batch, in_channels, width = input.shape
+        out_channels, in_channels_, kernel_width = self.weights.value.shape
+        assert in_channels == in_channels_, "Input channels don't match"
 
+        # Compute output width based on kernel size
+        output_width = width - kernel_width + 1
+
+        # Perform convolution using minitorch conv1d operation
+        output = minitorch.conv1d(input, self.weights.value)
+
+        # Add bias - broadcasting will handle the dimensions
+        return output + self.bias.value
 
 class CNNSentimentKim(minitorch.Module):
     """
@@ -62,15 +76,77 @@ class CNNSentimentKim(minitorch.Module):
         super().__init__()
         self.feature_map_size = feature_map_size
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        self.dropout_rate = dropout
+        self.filter_sizes = filter_sizes
 
+        # Create convolutional layers
+        # Use a dictionary to store the convs since we don't have ModuleList
+        self.conv_dict = {}
+        for i, filter_size in enumerate(filter_sizes):
+            conv = Conv1d(
+                in_channels=embedding_size,
+                out_channels=feature_map_size,
+                kernel_width=filter_size
+            )
+            # Set as an attribute so it's properly registered
+            setattr(self, f'conv_{i}', conv)
+            self.conv_dict[i] = conv
+
+        # Linear layer for final classification
+        # Input size is feature_map_size * number of filter sizes
+        total_features = feature_map_size * len(filter_sizes)
+        self.linear = Linear(total_features, 1)
     def forward(self, embeddings):
         """
         embeddings tensor: [batch x sentence length x embedding dim]
         """
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        # Rearrange input to (batch, embedding_dim, sentence_length)
+    # Rearrange input to (batch, embedding_dim, sentence_length)
+        batch, sent_len, emb_dim = embeddings.shape
+        x = embeddings.permute(0, 2, 1)
 
+        # Process each conv layer
+        all_features = []
+        total_features = 0
+
+        # First pass: collect all features and determine total size
+        for i in range(len(self.filter_sizes)):
+            # Get the conv layer
+            conv = self.conv_dict[i]
+
+            # Apply convolution and ReLU
+            conv_out = conv(x).relu()
+
+            # Take max over the sentence dimension (dim=2)
+            pooled = minitorch.max(conv_out, dim=2)
+
+            # Store the pooled features
+            all_features.append(pooled)
+            total_features += self.feature_map_size
+
+        # Create a tensor to hold all features
+        combined_shape = (batch, total_features, 1)
+        combined = all_features[0].zeros(combined_shape)
+
+        # Combine all features
+        current_pos = 0
+        for feature in all_features:
+            feature_size = self.feature_map_size
+            # Copy feature values to the appropriate slice
+            for b in range(batch):
+                for j in range(feature_size):
+                    combined[b, current_pos + j, 0] = feature[b, j, 0]
+            current_pos += feature_size
+
+        # View to collapse last dimension
+        combined = combined.view(batch, total_features)
+
+        # Apply dropout
+        x = minitorch.dropout(combined, self.dropout_rate, self.training)
+
+        # Final linear layer and sigmoid
+        return self.linear(x).sigmoid().view(embeddings.shape[0])
 
 # Evaluation helper methods
 def get_predictions_array(y_true, model_output):
