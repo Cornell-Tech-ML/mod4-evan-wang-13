@@ -3,6 +3,7 @@ from typing import Tuple
 from . import operators
 from .autodiff import Context
 from .fast_ops import FastOps
+from .tensor_ops import SimpleOps
 from .tensor import Tensor
 from .tensor_functions import Function, rand, tensor
 
@@ -95,7 +96,7 @@ class Max(Function):
             dim : int dimension to reduce along
 
         """
-        max_result = FastOps.reduce(operators.max, start=-float("inf"))(
+        max_result = SimpleOps.reduce(operators.max, start=-float("inf"))(
             a, int(dim.item())
         )
 
