@@ -2,7 +2,6 @@ from typing import Tuple
 
 from . import operators
 from .autodiff import Context
-from .fast_ops import FastOps
 from .tensor_ops import SimpleOps
 from .tensor import Tensor
 from .tensor_functions import Function, rand, tensor
