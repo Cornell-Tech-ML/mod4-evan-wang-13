@@ -12,6 +12,7 @@ from .tensor_strategies import tensors
 @given(tensors(shape=(1, 1, 4, 4)))
 def test_avg(t: Tensor) -> None:
     out = minitorch.avgpool2d(t, (2, 2))
+
     assert_close(
         out[0, 0, 0, 0], sum([t[0, 0, i, j] for i in range(2) for j in range(2)]) / 4.0
     )
@@ -32,7 +33,33 @@ def test_avg(t: Tensor) -> None:
 @given(tensors(shape=(2, 3, 4)))
 def test_max(t: Tensor) -> None:
     # TODO: Implement for Task 4.4.
-    raise NotImplementedError("Need to implement for Task 4.4")
+    """Test max reduction along different dimensions"""
+    # Test forward pass
+    out = minitorch.max(t, 1)
+
+    # Check correctness of forward
+    for i in range(2):
+        for j in range(4):
+            expected = max([t[i, k, j] for k in range(3)])
+            assert_close(out[i, 0, j], expected)
+
+    # Manual backward check
+    # Create a simple case where we know the expected gradients
+    x = minitorch.tensor([[[2.0, 1.0], [2.0, 0.0], [1.0, 0.0]]])  # Shape: (1, 3, 2)
+    y = minitorch.max(x, 1)  # Max along dim 1
+    y.sum().backward()
+
+    # Check that gradients are split equally among max elements
+    # For first column: two 2.0s should each get gradient 0.5
+    assert x.grad is not None
+    assert_close(x.grad[0, 0, 0], 0.5)  # First 2.0
+    assert_close(x.grad[0, 1, 0], 0.5)  # Second 2.0
+    assert_close(x.grad[0, 2, 0], 0.0)  # 1.0 gets no gradient
+
+    # For second column: single max should get full gradient
+    assert_close(x.grad[0, 0, 1], 1.0)  # 1.0 gets full gradient
+    assert_close(x.grad[0, 1, 1], 0.0)  # 0.0 gets no gradient
+    assert_close(x.grad[0, 2, 1], 0.0)  # 0.0 gets no gradient
 
 
 @pytest.mark.task4_4
