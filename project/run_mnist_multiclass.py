@@ -107,7 +107,8 @@ class Network(minitorch.Module):
         # 5. First linear + ReLU + Dropout
         out = self.linear1(out)
         out = out.relu()
-        out = minitorch.dropout(out, 0.25)
+        if self.training:
+            out = minitorch.dropout(out, 0.25)
 
         # 6. Final linear layer
         out = self.linear2(out)

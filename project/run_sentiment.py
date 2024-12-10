@@ -116,7 +116,7 @@ class CNNSentimentKim(minitorch.Module):
             conv = self.conv_dict[i]
 
             # Apply convolution and ReLU
-            conv_out = conv(x)
+            conv_out = conv(x).relu()
 
             # Take max over the sentence dimension (dim=2)
             pooled = minitorch.max(conv_out, dim=2)
@@ -143,7 +143,10 @@ class CNNSentimentKim(minitorch.Module):
         combined = combined.view(batch, total_features)
 
         # Apply dropout
-        x = minitorch.dropout(combined, self.dropout_rate, self.training)
+        if self.training:
+            x = minitorch.dropout(combined, self.dropout_rate)
+        else:
+            x = combined
 
         # Final linear layer and sigmoid
         return self.linear(x).sigmoid().view(embeddings.shape[0])
