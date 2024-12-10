@@ -116,7 +116,7 @@ class CNNSentimentKim(minitorch.Module):
             conv = self.conv_dict[i]
 
             # Apply convolution and ReLU
-            conv_out = conv(x).relu()
+            conv_out = conv(x)
 
             # Take max over the sentence dimension (dim=2)
             pooled = minitorch.max(conv_out, dim=2)
