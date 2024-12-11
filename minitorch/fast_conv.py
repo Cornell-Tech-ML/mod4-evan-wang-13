@@ -7,8 +7,6 @@ from numba import njit as _njit
 from .autodiff import Context
 from .tensor import Tensor
 from .tensor_data import (
-    MAX_DIMS,
-    Index,
     Shape,
     Strides,
     Storage,
@@ -22,6 +20,7 @@ Fn = TypeVar("Fn")
 
 
 def njit(fn: Fn, **kwargs: Any) -> Fn:
+    """Decorator to JIT compile a function using Numba."""
     return _njit(inline="always", **kwargs)(fn)  # type: ignore
 
 
@@ -87,11 +86,53 @@ def _tensor_conv1d(
         and in_channels == in_channels_
         and out_channels == out_channels_
     )
-    s1 = input_strides
-    s2 = weight_strides
-
+    # s1 = input_strides
+    # s2 = weight_strides
     # TODO: Implement for Task 4.1.
-    raise NotImplementedError("Need to implement for Task 4.1")
+    # For each position in the output tensor
+    for i in prange(out_size):
+        # Convert ordinal i to output index [b, oc, w]
+        out_index = np.zeros(3, np.int32)
+        to_index(i, out_shape, out_index)
+
+        # Get output position in memory
+        out_position = index_to_position(out_index, out_strides)
+
+        # Extract current indices
+        b = out_index[0]  # batch
+        oc = out_index[1]  # output channel
+        w = out_index[2]  # width position
+
+        # Initialize accumulator for convolution
+        acc = 0.0
+
+        # For each input channel
+        for ic in range(in_channels):
+            # For each position in the kernel
+            for k in range(kw):
+                # Calculate input width position based on reverse flag
+                if not reverse:
+                    w_in = w + k
+                    w_k = k
+                else:
+                    w_in = w - k
+                    w_k = kw - k - 1
+
+                # Only accumulate if we're within input bounds
+                if w_in >= 0 and w_in < width:
+                    # Calculate input position
+                    input_index = np.array([b, ic, w_in], np.int32)
+                    input_position = index_to_position(input_index, input_strides)
+
+                    # Calculate weight position
+                    weight_index = np.array([oc, ic, w_k], np.int32)
+                    weight_position = index_to_position(weight_index, weight_strides)
+
+                    # Accumulate the product
+                    acc += input[input_position] * weight[weight_position]
+
+        # Store final accumulated value
+        out[out_position] = acc
 
 
 tensor_conv1d = njit(_tensor_conv1d, parallel=True)
@@ -127,6 +168,7 @@ class Conv1dFun(Function):
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute the backward pass for a 1D Convolution."""
         input, weight = ctx.saved_values
         batch, in_channels, w = input.shape
         out_channels, in_channels, kw = weight.shape
@@ -220,7 +262,55 @@ def _tensor_conv2d(
     s20, s21, s22, s23 = s2[0], s2[1], s2[2], s2[3]
 
     # TODO: Implement for Task 4.2.
-    raise NotImplementedError("Need to implement for Task 4.2")
+    # For each position in the output tensor
+    for i in prange(out_size):
+        # Convert ordinal i to output index [b, oc, h, w]
+        out_index = np.zeros(4, np.int32)
+        to_index(i, out_shape, out_index)
+
+        # Get output position in memory
+        out_position = index_to_position(out_index, out_strides)
+
+        # Extract current indices
+        b = out_index[0]  # batch
+        oc = out_index[1]  # output channel
+        h = out_index[2]  # height position
+        w = out_index[3]  # width position
+
+        # Initialize accumulator for convolution
+        acc = 0.0
+
+        # For each input channel
+        for ic in range(in_channels):
+            # For each kernel height position
+            for kh_pos in range(kh):
+                # For each kernel width position
+                for kw_pos in range(kw):
+                    # Calculate input positions based on reverse flag
+                    if not reverse:
+                        h_in = h + kh_pos
+                        w_in = w + kw_pos
+                        h_k = kh_pos
+                        w_k = kw_pos
+                    else:
+                        h_in = h - kh_pos
+                        w_in = w - kw_pos
+                        h_k = kh - kh_pos - 1
+                        w_k = kw - kw_pos - 1
+
+                    # Only accumulate if we're within input bounds
+                    if h_in >= 0 and h_in < height and w_in >= 0 and w_in < width:
+                        # Calculate input position using unwrapped strides
+                        in_position = b * s10 + ic * s11 + h_in * s12 + w_in * s13
+
+                        # Calculate weight position using unwrapped strides
+                        weight_position = oc * s20 + ic * s21 + h_k * s22 + w_k * s23
+
+                        # Accumulate the product
+                        acc += input[in_position] * weight[weight_position]
+
+        # Store final accumulated value
+        out[out_position] = acc
 
 
 tensor_conv2d = njit(_tensor_conv2d, parallel=True, fastmath=True)
@@ -254,6 +344,7 @@ class Conv2dFun(Function):
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute the backward pass for a 2D Convolution."""
         input, weight = ctx.saved_values
         batch, in_channels, h, w = input.shape
         out_channels, in_channels, kh, kw = weight.shape
